@@ -1,0 +1,47 @@
+name: Auto Scraper to Bale
+
+on:
+  schedule:
+    - cron: '0 */2 * * *' # هر دو ساعت یکبار
+  workflow_dispatch: # امکان اجرای دستی برای تست
+
+jobs:
+  run-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Scraper
+        env:
+          TARGET_URLS: ${{ secrets.TARGET_URLS }}
+        run: python scraper.py
+
+      - name: Zip Files
+        run: |
+          sudo apt-get install zip
+          rm -f data_package.zip
+          zip -P "${{ secrets.ZIP_PASSWORD }}" -r data_package.zip output/
+
+      - name: Send to Bale
+        run: |
+          curl -X POST "https://tapi.bale.ai/bot${{ secrets.BALE_BOT_TOKEN }}/sendDocument" \
+          -F "chat_id=${{ secrets.BALE_CHAT_ID }}" \
+          -F "document=@data_package.zip" \
+          -F "caption=آپدیت جدید محتوا 📦"
+
+      - name: Update Repository
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add data_package.zip
+          git commit -m "Update zip file" || exit 0
+          git push origin main
